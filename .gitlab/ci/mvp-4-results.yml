@@ -1,0 +1,59 @@
+# Copy this file to .gitlab-ci.yml after MVP 3 passes.
+# It is the compact end-to-end variant: one manual job after the build.
+stages: [build, hpc]
+
+variables:
+  CI_TOOLS_IMAGE: "registry.access.redhat.com/ubi8/ubi:8.10"
+  HPC_SSH_PORT: "22"
+  HPC_WORK_ROOT: "/project/CHANGE_ME/gitlab-runs"
+  HPC_CONTAINER: "/approved/containers/CHANGE_ME-hpc-rhel8.10.sif"
+  SLURM_ACCOUNT: "CHANGE_ME"
+  SLURM_PARTITION: "CHANGE_ME"
+  SLURM_TIME: "00:10:00"
+  SLURM_NODES: "1"
+  SLURM_TASKS: "1"
+  SLURM_CPUS: "1"
+  SLURM_MEMORY: "1G"
+  SLURM_POLL_SECONDS: "15"
+  SLURM_WAIT_TIMEOUT_SECONDS: "1800"
+  SIM_ARGS: "[]"
+  HPC_CLEANUP_ON_SUCCESS: "false"
+
+build:sim:
+  stage: build
+  image: "$CI_TOOLS_IMAGE"
+  script:
+    - install -D -m 0755 examples/sim build/sim
+  artifacts:
+    paths: [build/sim]
+    expire_in: 1 day
+
+hpc:end-to-end:
+  stage: hpc
+  image: "$CI_TOOLS_IMAGE"
+  tags: [CHANGE_ME_HPC_NETWORK_RUNNER]
+  when: manual
+  allow_failure: false
+  needs:
+    - job: build:sim
+      artifacts: true
+  before_script:
+    - dnf -y -q install openssh-clients jq >/dev/null
+    - chmod +x scripts/*.sh slurm/run_sim.slurm
+  script:
+    - scripts/ssh_check.sh
+    - scripts/stage_remote.sh
+    - scripts/submit_slurm.sh
+    - |
+      set +e
+      scripts/wait_slurm.sh
+      wait_rc=$?
+      set -e
+      scripts/retrieve_results.sh || retrieve_rc=$?
+      if [ "${retrieve_rc:-0}" -ne 0 ]; then exit "$retrieve_rc"; fi
+      exit "$wait_rc"
+  artifacts:
+    when: always
+    paths: [results/, remote.env, job.env, slurm-status.env]
+    expire_in: 14 days
+

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+mkdir -p results
+{
+  printf 'demo simulation completed\n'
+  printf 'host=%s\n' "$(hostname)"
+  printf 'args=' 
+  printf '%q ' "$@"
+  printf '\n'
+} | tee results/demo-result.txt
+

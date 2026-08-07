@@ -1,0 +1,38 @@
+# Copy this file to .gitlab-ci.yml after MVP 1 passes.
+stages: [build, stage-remote]
+
+variables:
+  CI_TOOLS_IMAGE: "registry.access.redhat.com/ubi8/ubi:8.10"
+  HPC_SSH_PORT: "22"
+  HPC_WORK_ROOT: "/project/CHANGE_ME/gitlab-runs"
+  HPC_CONTAINER: "/approved/containers/CHANGE_ME-hpc-rhel8.10.sif"
+  SIM_ARGS: "[]"
+
+build:sim:
+  stage: build
+  image: "$CI_TOOLS_IMAGE"
+  script:
+    - install -D -m 0755 examples/sim build/sim
+  artifacts:
+    paths: [build/sim]
+    expire_in: 1 day
+
+hpc:stage:
+  stage: stage-remote
+  image: "$CI_TOOLS_IMAGE"
+  tags: [CHANGE_ME_HPC_NETWORK_RUNNER]
+  when: manual
+  needs:
+    - job: build:sim
+      artifacts: true
+  before_script:
+    - dnf -y -q install openssh-clients jq >/dev/null
+    - chmod +x scripts/*.sh slurm/run_sim.slurm
+  script:
+    - scripts/stage_remote.sh
+  artifacts:
+    reports:
+      dotenv: remote.env
+    paths: [remote.env]
+    expire_in: 1 day
+

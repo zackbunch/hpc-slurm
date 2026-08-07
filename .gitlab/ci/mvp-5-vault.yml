@@ -1,0 +1,82 @@
+# Copy this file to .gitlab-ci.yml after MVP 4 passes and Vault is configured.
+stages: [build, hpc]
+
+variables:
+  CI_TOOLS_IMAGE: "registry.access.redhat.com/ubi8/ubi:8.10"
+  HPC_SSH_PORT: "22"
+  HPC_WORK_ROOT: "/project/CHANGE_ME/gitlab-runs"
+  HPC_CONTAINER: "/approved/containers/CHANGE_ME-hpc-rhel8.10.sif"
+  SLURM_ACCOUNT: "CHANGE_ME"
+  SLURM_PARTITION: "CHANGE_ME"
+  SLURM_TIME: "00:10:00"
+  SLURM_NODES: "1"
+  SLURM_TASKS: "1"
+  SLURM_CPUS: "1"
+  SLURM_MEMORY: "1G"
+  SLURM_POLL_SECONDS: "15"
+  SLURM_WAIT_TIMEOUT_SECONDS: "1800"
+  SIM_ARGS: "[]"
+  VAULT_ADDR: "https://vault.example.com"
+  VAULT_AUTH_PATH: "jwt"
+  VAULT_ROLE: "gitlab-hpc"
+  VAULT_KV_MOUNT: "kv"
+  VAULT_SSH_SECRET_PATH: "ci/hpc/ssh"
+  VAULT_SSH_KEY_FIELD: "private_key"
+
+build:sim:
+  stage: build
+  image: "$CI_TOOLS_IMAGE"
+  script:
+    - install -D -m 0755 examples/sim build/sim
+  artifacts:
+    paths: [build/sim]
+    expire_in: 1 day
+
+hpc:vault-end-to-end:
+  stage: hpc
+  image: "$CI_TOOLS_IMAGE"
+  tags: [CHANGE_ME_HPC_NETWORK_RUNNER]
+  when: manual
+  allow_failure: false
+  needs:
+    - job: build:sim
+      artifacts: true
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: "$VAULT_ADDR"
+  before_script:
+    - dnf -y -q install openssh-clients curl jq >/dev/null
+    - chmod +x scripts/*.sh slurm/run_sim.slurm
+  script:
+    - export HPC_SSH_PRIVATE_KEY="$(scripts/vault_fetch_ssh_key.sh)"
+    - unset VAULT_ID_TOKEN
+    - scripts/ssh_check.sh
+    - scripts/stage_remote.sh
+    - scripts/submit_slurm.sh
+    - |
+      set +e
+      scripts/wait_slurm.sh
+      wait_rc=$?
+      set -e
+      scripts/retrieve_results.sh || retrieve_rc=$?
+      if [ "${retrieve_rc:-0}" -ne 0 ]; then exit "$retrieve_rc"; fi
+      exit "$wait_rc"
+  after_script:
+    - rm -rf -- "$CI_PROJECT_DIR/.secrets" "$CI_PROJECT_DIR/.ssh"
+  artifacts:
+    when: always
+    paths: [results/, remote.env, job.env, slurm-status.env]
+    expire_in: 14 days
+
+# Native GitLab Vault alternative (when supported by your installation):
+#
+#   id_tokens:
+#     VAULT_ID_TOKEN:
+#       aud: "$VAULT_ADDR"
+#   secrets:
+#     HPC_SSH_PRIVATE_KEY:
+#       vault: ci/hpc/ssh/private_key@kv
+#       token: $VAULT_ID_TOKEN
+#
+# GitLab exposes the secret as a temporary file path, which setup_ssh.sh accepts.
+

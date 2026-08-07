@@ -1,0 +1,13 @@
+build/
+results/
+.env
+.ssh/
+job.env
+job.id
+remote.env
+*.sif
+*.key
+*.pem
+slurm-*.out
+slurm-*.err
+

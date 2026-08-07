@@ -1,0 +1,60 @@
+# Copy this file to .gitlab-ci.yml after MVP 2 passes.
+stages: [build, stage-remote, submit]
+
+variables:
+  CI_TOOLS_IMAGE: "registry.access.redhat.com/ubi8/ubi:8.10"
+  HPC_SSH_PORT: "22"
+  HPC_WORK_ROOT: "/project/CHANGE_ME/gitlab-runs"
+  HPC_CONTAINER: "/approved/containers/CHANGE_ME-hpc-rhel8.10.sif"
+  SLURM_ACCOUNT: "CHANGE_ME"
+  SLURM_PARTITION: "CHANGE_ME"
+  SLURM_TIME: "00:10:00"
+  SLURM_NODES: "1"
+  SLURM_TASKS: "1"
+  SLURM_CPUS: "1"
+  SLURM_MEMORY: "1G"
+  SIM_ARGS: "[]"
+
+.hpc-base:
+  image: "$CI_TOOLS_IMAGE"
+  tags: [CHANGE_ME_HPC_NETWORK_RUNNER]
+  before_script:
+    - dnf -y -q install openssh-clients jq >/dev/null
+    - chmod +x scripts/*.sh slurm/run_sim.slurm
+
+build:sim:
+  stage: build
+  image: "$CI_TOOLS_IMAGE"
+  script:
+    - install -D -m 0755 examples/sim build/sim
+  artifacts:
+    paths: [build/sim]
+    expire_in: 1 day
+
+hpc:stage:
+  extends: .hpc-base
+  stage: stage-remote
+  when: manual
+  needs:
+    - job: build:sim
+      artifacts: true
+  script: [scripts/stage_remote.sh]
+  artifacts:
+    reports:
+      dotenv: remote.env
+    paths: [remote.env]
+    expire_in: 1 day
+
+hpc:submit:
+  extends: .hpc-base
+  stage: submit
+  needs:
+    - job: hpc:stage
+      artifacts: true
+  script: [scripts/submit_slurm.sh]
+  artifacts:
+    reports:
+      dotenv: job.env
+    paths: [job.env]
+    expire_in: 1 day
+

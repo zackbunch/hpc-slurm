@@ -1,0 +1,19 @@
+# Copy this file to .gitlab-ci.yml for the first integration test.
+stages: [preflight]
+
+variables:
+  CI_TOOLS_IMAGE: "registry.access.redhat.com/ubi8/ubi:8.10"
+  HPC_SSH_PORT: "22"
+
+hpc:ssh-check:
+  stage: preflight
+  image: "$CI_TOOLS_IMAGE"
+  tags: [CHANGE_ME_HPC_NETWORK_RUNNER]
+  when: manual
+  allow_failure: false
+  before_script:
+    - dnf -y -q install openssh-clients >/dev/null
+    - chmod +x scripts/*.sh
+  script:
+    - scripts/ssh_check.sh
+

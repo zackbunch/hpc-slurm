@@ -1,0 +1,19 @@
+{
+  "role_type": "jwt",
+  "policies": ["gitlab-hpc"],
+  "token_explicit_max_ttl": 300,
+  "user_claim": "sub",
+  "bound_audiences": ["https://vault.example.com"],
+  "bound_claims_type": "string",
+  "bound_claims": {
+    "project_id": "12345",
+    "ref_protected": "true"
+  },
+  "claim_mappings": {
+    "project_path": "gitlab_project_path",
+    "pipeline_id": "gitlab_pipeline_id",
+    "job_id": "gitlab_job_id",
+    "ref": "gitlab_ref"
+  }
+}
+
